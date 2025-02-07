@@ -2,6 +2,71 @@
 
 #include <iostream>
 
+Book::Book() : running_(false) {}
+
+Book::~Book() {
+    StopEngine();
+}
+
+void Book::StartEngine() {
+    running_ = true;
+    matchingThread_ = std::thread(&Book::ProcessOrders, this);
+}
+
+void Book::StopEngine() {
+    {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        running_ = false;
+    }
+    cv_.notify_one();
+
+    if (matchingThread_.joinable()) {
+        matchingThread_.join();
+    }
+}
+
+void Book::SubmitOrder(const std::shared_ptr<Order> &order) {
+    {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        orderQueue_.push(order);
+    }
+    ++pendingOrders_;
+    cv_.notify_one();
+}
+
+void Book::ProcessOrders() {
+    while (true) {
+        std::shared_ptr<Order> order;
+
+        {
+            std::unique_lock<std::mutex> lock(queueMutex_);
+
+            // wait until there is at least one order in the queue OR running=false
+            cv_.wait(lock, [this] {return !orderQueue_.empty() || !running_; ;});
+
+            // if engine has been stopped and no orders remain, exit
+            if (!running_ && orderQueue_.empty()) {
+                break;
+            }
+
+            order = orderQueue_.front();
+            orderQueue_.pop();
+        }
+        AddOrder(order);
+
+        if (--pendingOrders_ == 0) {
+            cvFinished_.notify_one();
+        }
+    }
+}
+
+// Wait for all orders to be processed (used in tests)
+void Book::WaitForProcessing() {
+    std::unique_lock<std::mutex> lock(queueMutex_);
+    cvFinished_.wait(lock, [this] { return pendingOrders_.load() == 0; });
+}
+
+
 std::vector<Trade> Book::MatchOrders() {
     std::vector<Trade> trades;
 

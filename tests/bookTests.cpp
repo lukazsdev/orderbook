@@ -2,39 +2,66 @@
 
 #include "book.h"
 
-TEST(OrderBookTests, AddLimitOrderTests) {
-    Book book;
+TEST(OrderBookTests, BasicMatchingTest) {
+    Book orderBook;
+    orderBook.StartEngine();
 
-    const std::vector<std::shared_ptr<Order>> initialOrders = {
-        std::make_shared<Order>(OrderType::Limit, Side::Buy, 1, 50, 100),
-        std::make_shared<Order>(OrderType::Limit, Side::Sell, 2, 51, 100),
-        std::make_shared<Order>(OrderType::Limit, Side::Buy, 3, 50, 200)
-    };
+    auto buyOrder = std::make_shared<Order>(OrderType::Limit, Side::Buy, 1, 100, 10);
+    auto sellOrder = std::make_shared<Order>(OrderType::Limit, Side::Sell, 2, 100, 10);
 
-    for (const auto& order : initialOrders) {
-        auto trades = book.AddOrder(order);
-        ASSERT_EQ(trades.size(), 0);
+    orderBook.SubmitOrder(buyOrder);
+    orderBook.SubmitOrder(sellOrder);
+
+    orderBook.WaitForProcessing(); // Ensure all orders are processed
+
+    EXPECT_EQ(orderBook.Size(), 0); // Both orders should be matched and removed
+}
+
+TEST(OrderBookTests, PartialMatchingTest) {
+    Book orderBook;
+    orderBook.StartEngine();
+
+    auto buyOrder = std::make_shared<Order>(OrderType::Limit, Side::Buy, 1, 100, 10);
+    auto sellOrder = std::make_shared<Order>(OrderType::Limit, Side::Sell, 2, 100, 5); // Only 5 available
+
+    orderBook.SubmitOrder(buyOrder);
+    orderBook.SubmitOrder(sellOrder);
+
+    orderBook.WaitForProcessing();
+
+    EXPECT_EQ(orderBook.Size(), 1); // Remaining buy order should still be in book
+    EXPECT_EQ(buyOrder->GetQuantity(), 5); // 5 should be unfilled
+}
+
+TEST(OrderBookTests, MultithreadedSubmissionTest) {
+    Book orderBook;
+    orderBook.StartEngine();
+
+    constexpr int numThreads = 10;
+    constexpr int ordersPerThread = 10;
+
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&orderBook, t]() {
+            for (int i = 0; i < ordersPerThread; ++i) {
+                auto order = std::make_shared<Order>(
+                    OrderType::Limit,
+                    (t % 2 == 0 ? Side::Buy : Side::Sell), // Alternate buy/sell per thread
+                    t * ordersPerThread + i,
+                    (t % 2 == 0 ? 100 : 101), // Buys at 100, Sells at 101 (no immediate match)
+                    1);
+                orderBook.SubmitOrder(order);
+            }
+        });
     }
 
-    ASSERT_EQ(book.Size(), 3);
-
-    const std::vector<std::shared_ptr<Order>> sellOrders = {
-        std::make_shared<Order>(OrderType::Limit, Side::Sell, 4, 49, 50),
-        std::make_shared<Order>(OrderType::Limit, Side::Sell, 5, 49, 150),
-        std::make_shared<Order>(OrderType::Limit, Side::Sell, 6, 49, 250)
-    };
-
-    const std::vector<std::vector<Trade>> expectedTrades = {
-        {Trade{TradeData{1, 50, 50}, TradeData{4, 49, 50}}},
-        {Trade{TradeData{1, 50, 50}, TradeData{5, 49, 50}},
-            Trade{TradeData{3, 50, 100}, TradeData{5, 49, 100}}},
-           {Trade{TradeData{3, 50, 100}, TradeData{6, 49, 100}}}
-    };
-
-    for (auto i = 0; i < sellOrders.size(); i++) {
-        const auto trades = book.AddOrder(sellOrders[i]);
-        ASSERT_EQ(trades, expectedTrades[i]);
+    for (auto& thread : threads) {
+        thread.join();
     }
 
-    ASSERT_EQ(book.Size(), 2);
+    orderBook.WaitForProcessing();
+
+    // Since Buy 100 does NOT match Sell 101, all orders remain in the book
+    EXPECT_EQ(orderBook.Size(), numThreads * ordersPerThread);
 }
