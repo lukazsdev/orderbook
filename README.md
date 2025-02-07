@@ -1,3 +1,3 @@
 - [x] gtest
-- [ ] benchmark
-- [ ] multithreading
+- [x] benchmark
+- [x] multithreading

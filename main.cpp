@@ -1,32 +1,54 @@
-#include <iostream>
-
 #include "src/book.h"
+#include <iostream>
+#include <chrono>
+#include <vector>
+#include <thread>
+
+void RunBenchmark(int numOrders, int numThreads) {
+    Book orderBook;
+    orderBook.StartEngine();
+
+    std::vector<std::thread> threads;
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    for (int t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&orderBook, t, numOrders, numThreads]() {
+            for (int i = 0; i < numOrders / numThreads; ++i) {
+                auto order = std::make_shared<Order>(
+                    OrderType::Limit,
+                    (t % 2 == 0 ? Side::Buy : Side::Sell), // Alternate buy/sell per thread
+                    t * (numOrders / numThreads) + i,
+                    100,
+                    1);
+                orderBook.SubmitOrder(order);
+            }
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    orderBook.WaitForProcessing();
+    orderBook.StopEngine();
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = endTime - startTime;
+
+    double ordersPerSecond = numOrders / elapsed.count();
+
+    std::cout << "Benchmark Results:\n";
+    std::cout << "Total Orders: " << numOrders << "\n";
+    std::cout << "Elapsed Time: " << elapsed.count() << " seconds\n";
+    std::cout << "Orders per Second: " << ordersPerSecond << "\n";
+}
 
 int main() {
-    Book book;
+    constexpr int NUM_ORDERS = 1'000'000;
+    constexpr int NUM_THREADS = 10;
 
-    auto order1 = std::make_shared<Order>(OrderType::Limit, Side::Buy, 1, 50, 100);
-    auto order2 = std::make_shared<Order>(OrderType::Limit, Side::Sell, 2, 51, 100);
-    auto order3 = std::make_shared<Order>(OrderType::Limit, Side::Buy, 3, 50, 200);
+    std::cout << "Running order book benchmark...\n";
+    RunBenchmark(NUM_ORDERS, NUM_THREADS);
 
-    book.AddOrder(order1);
-    book.AddOrder(order2);
-    book.AddOrder(order3);
-
-    book.Print();
-
-    auto order4 = std::make_shared<Order>(OrderType::Limit, Side::Sell, 4, 49, 50);
-    book.AddOrder(order4);
-
-    book.Print();
-
-    auto order5 = std::make_shared<Order>(OrderType::Limit, Side::Sell, 5, 49, 150);
-    book.AddOrder(order5);
-
-    book.Print();
-
-    auto order6 = std::make_shared<Order>(OrderType::Limit, Side::Sell, 6, 49, 250);
-    book.AddOrder(order6);
-
-    book.Print();
+    return 0;
 }

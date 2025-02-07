@@ -28,12 +28,13 @@ public:
     void ProcessOrders(); // background method that processes queue orders (runs in separate thread)
     void WaitForProcessing(); // Wait for all orders to be processed (for testing)
 
-    std::vector<Trade> MatchOrders();
-    std::vector<Trade> AddOrder(const std::shared_ptr<Order>& order);
     std::size_t Size() const;
     void Print() const;
 
 private:
+    std::vector<Trade> MatchOrders();
+    std::vector<Trade> AddOrder(const std::shared_ptr<Order>& order);
+
     // Maps price to vector of orders
     std::map<std::uint32_t, std::list<std::shared_ptr<Order>>, std::greater<>> bids_;
     std::map<std::uint32_t, std::list<std::shared_ptr<Order>>> asks_;

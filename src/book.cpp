@@ -36,25 +36,27 @@ void Book::SubmitOrder(const std::shared_ptr<Order> &order) {
 
 void Book::ProcessOrders() {
     while (true) {
-        std::shared_ptr<Order> order;
+        std::vector<std::shared_ptr<Order>> batch;
 
         {
             std::unique_lock<std::mutex> lock(queueMutex_);
+            cv_.wait(lock, [this] { return !orderQueue_.empty() || !running_; });
 
-            // wait until there is at least one order in the queue OR running=false
-            cv_.wait(lock, [this] {return !orderQueue_.empty() || !running_; ;});
-
-            // if engine has been stopped and no orders remain, exit
             if (!running_ && orderQueue_.empty()) {
                 break;
             }
 
-            order = orderQueue_.front();
-            orderQueue_.pop();
+            while (!orderQueue_.empty() && batch.size() < 100) {
+                batch.push_back(orderQueue_.front());
+                orderQueue_.pop();
+            }
         }
-        AddOrder(order);
 
-        if (--pendingOrders_ == 0) {
+        for (auto& order : batch) {
+            AddOrder(order);
+        }
+
+        if (pendingOrders_.fetch_sub(batch.size()) == batch.size()) {
             cvFinished_.notify_one();
         }
     }
