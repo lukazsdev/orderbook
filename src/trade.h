@@ -7,6 +7,8 @@ struct TradeData {
     std::uint32_t orderId_;
     std::uint32_t price_;
     std::uint32_t quantity_;
+
+    bool operator==(const TradeData& other) const;
 };
 
 class Trade {
@@ -15,6 +17,8 @@ public:
 
     [[nodiscard]] const TradeData& GetBidTrade() const;
     [[nodiscard]] const TradeData& GetAskTrade() const;
+
+    bool operator==(const Trade& other) const;
 
 private:
     TradeData bidTrade_;

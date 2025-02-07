@@ -76,6 +76,11 @@ std::vector<Trade> Book::AddOrder(const std::shared_ptr<Order>& order) {
     return MatchOrders();
 }
 
+std::size_t Book::Size() const {
+    return orders_.size();
+}
+
+
 void Book::Print() const {
     std::cout << "Orderbook:\n";
     std::cout << "Bids:\n";

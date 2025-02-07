@@ -19,6 +19,7 @@ class Book {
 public:
     std::vector<Trade> MatchOrders();
     std::vector<Trade> AddOrder(const std::shared_ptr<Order>& order);
+    std::size_t Size() const;
     void Print() const;
 
 private:
