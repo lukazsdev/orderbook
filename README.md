@@ -1,4 +1,3 @@
 - [x] gtest
-- [x] constructor/destructor for book
-- [x] benchmark
-- [x] multithreading
+- [ ] benchmark
+- [ ] multithreading
